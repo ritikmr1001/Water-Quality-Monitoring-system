@@ -1,0 +1,147 @@
+#include <Wire.h>
+#include <LiquidCrystal_I2C.h>
+#include <OneWire.h>
+#include <DallasTemperature.h>
+
+// ================= LCD =================
+LiquidCrystal_I2C lcd(0x27, 16, 2);
+
+// ================= Pins =================
+#define PH_PIN 34
+#define TURBIDITY_PIN 35
+#define ONE_WIRE_BUS 4
+
+// ================= Temperature Sensor =================
+OneWire oneWire(ONE_WIRE_BUS);
+DallasTemperature sensors(&oneWire);
+
+// ================= Turbidity Calibration =================
+int clearADC = 1970;   // clear water ADC
+int dirtyADC = 800;    // dirty water ADC
+
+// Convert turbidity ADC to percentage
+int getTurbidityPercent(int adcValue) {
+  float percent = ((float)(clearADC - adcValue) / (clearADC - dirtyADC)) * 100.0;
+
+  if (percent < 0) percent = 0;
+  if (percent > 100) percent = 100;
+
+  return (int)percent;
+}
+
+void setup() {
+  Serial.begin(115200);
+  delay(1000);
+
+  lcd.init();
+  lcd.backlight();
+
+  sensors.begin();
+
+  // Welcome screen
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.print(" Smart Water ");
+  lcd.setCursor(0, 1);
+  lcd.print(" Monitoring ");
+  delay(2000);
+}
+
+void loop() {
+
+  // ================= Read pH =================
+  int phADC = analogRead(PH_PIN);
+  float voltage = phADC * (3.3 / 4095.0);
+
+  // YOUR CALIBRATED pH FORMULA
+  float pHValue = (-4.82 * voltage) + 13.34;
+
+  // ================= Read Turbidity =================
+  int turbidityADC = analogRead(TURBIDITY_PIN);
+  int turbidityPercent = getTurbidityPercent(turbidityADC);
+
+  // ================= Read Temperature =================
+  sensors.requestTemperatures();
+  float tempC = sensors.getTempCByIndex(0);
+
+  // ================= Turbidity Status =================
+  String turbidityStatus;
+  if (turbidityPercent <= 30) {
+    turbidityStatus = "Clear";
+  }
+  else if (turbidityPercent <= 70) {
+    turbidityStatus = "Moderate";
+  }
+  else {
+    turbidityStatus = "Turbid";
+  }
+
+  // ================= Water Quality Status =================
+  String quality;
+
+  if (pHValue >= 6.0 && pHValue <= 7.5 && turbidityPercent <= 30) {
+    quality = "Safe Use";
+  }
+  else if (pHValue >= 2.0 && pHValue < 6.0) {
+    quality = "Acidic";
+  }
+  else if (pHValue > 7.5) {
+    quality = "Alkaline";
+  }
+  else {
+    quality = "Check Qual";
+  }
+
+  // ================= Serial Monitor =================
+  Serial.println("===== Water Quality Monitoring =====");
+
+  Serial.print("pH ADC: ");
+  Serial.print(phADC);
+  Serial.print(" | Voltage: ");
+  Serial.print(voltage, 2);
+  Serial.print(" V | pH: ");
+  Serial.println(pHValue, 2);
+
+  Serial.print("Turbidity ADC: ");
+  Serial.print(turbidityADC);
+  Serial.print(" | Turbidity: ");
+  Serial.print(turbidityPercent);
+  Serial.print("% | Status: ");
+  Serial.println(turbidityStatus);
+
+  Serial.print("Temperature: ");
+  Serial.print(tempC, 1);
+  Serial.println(" C");
+
+  Serial.print("Overall Water Quality: ");
+  Serial.println(quality);
+
+  Serial.println("-----------------------------------");
+
+  // ================= LCD Screen 1 =================
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.print("pH:");
+  lcd.print(pHValue, 1);
+
+  lcd.setCursor(9, 0);
+  lcd.print(tempC, 1);
+  lcd.print("C");
+
+  lcd.setCursor(0, 1);
+  lcd.print(quality);
+
+  delay(3000);
+
+  // ================= LCD Screen 2 =================
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.print("Turb:");
+  lcd.print(turbidityPercent);
+  lcd.print("%");
+
+  lcd.setCursor(0, 1);
+  lcd.print(turbidityStatus);
+
+  delay(3000);
+}
